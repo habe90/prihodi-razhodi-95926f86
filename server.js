@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
@@ -17,10 +19,37 @@ const PORT = process.env.PORT || 3000;
 // Globalno stanje baze
 let dbReady = false;
 
-app.use(cors());
-app.use(express.json());
+// --- Sigurnost ---
+app.use(helmet({ contentSecurityPolicy: false })); // CSP off da bi React radilo
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  methods: ['GET', 'POST', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+app.use(express.json({ limit: '1mb' }));
 
-// Middleware — proveri da li je baza spremna za API rute
+// Rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minuta
+  max: 100, // max 100 zahteva po prozoru
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Previše zahteva, pokušajte ponovo kasnije.' },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20, // max 20 pokušaja logina/register
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Previše pokušaja prijave, pokušajte ponovo kasnije.' },
+});
+
+app.use('/api', apiLimiter);
+app.use('/api/login', authLimiter);
+app.use('/api/register', authLimiter);
+
+// --- Middleware ---
 function requireDb(_req, res, next) {
   if (!dbReady) {
     return res.status(503).json({ error: 'Baza nije dostupna, pokušajte ponovo za trenutak.' });
@@ -28,7 +57,9 @@ function requireDb(_req, res, next) {
   next();
 }
 
-// API rute
+// --- Rute ---
+
+// Debug (samo info o env)
 app.get('/api/debug', (_req, res) => {
   const envKeys = ['DATABASE_URL', 'DB_URL', 'POSTGRES_URL', 'POSTGRES_PRIVATE_URL', 'PORT', 'NODE_ENV'];
   const env = {};
@@ -66,14 +97,12 @@ async function start() {
   console.log('PORT:', PORT);
   console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
 
-  // Pokušaj inicijalizaciju baze, ali ne blokiraj startovanje servera
   try {
     await initDb();
     dbReady = true;
     console.log('Database initialized successfully.');
   } catch (err) {
     console.error('Database init failed (server will start without DB):', err.message);
-    // probaj ponovo za 5 sekundi
     setTimeout(async () => {
       try {
         await initDb();
