@@ -9,20 +9,23 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const totals = await query(
       `SELECT
-        COALESCE(SUM(CASE WHEN kategorija = 'prihod' THEN iznos ELSE 0 END), 0) AS prihodi,
-        COALESCE(SUM(CASE WHEN kategorija = 'rashod' THEN iznos ELSE 0 END), 0) AS rashodi
-      FROM transactions WHERE user_id = $1`,
+        COALESCE(SUM(CASE WHEN COALESCE(c.type, 'rashod') = 'prihod' THEN t.iznos ELSE 0 END), 0) AS prihodi,
+        COALESCE(SUM(CASE WHEN COALESCE(c.type, 'rashod') = 'rashod' THEN t.iznos ELSE 0 END), 0) AS rashodi
+      FROM transactions t
+      LEFT JOIN categories c ON c.name = t.kategorija AND c.user_id = t.user_id
+      WHERE t.user_id = $1`,
       [req.userId]
     );
 
     const monthly = await query(
       `SELECT
-        TO_CHAR(datum, 'YYYY-MM') AS month,
-        COALESCE(SUM(CASE WHEN kategorija = 'prihod' THEN iznos ELSE 0 END), 0) AS prihodi,
-        COALESCE(SUM(CASE WHEN kategorija = 'rashod' THEN iznos ELSE 0 END), 0) AS rashodi
-      FROM transactions
-      WHERE user_id = $1
-      GROUP BY TO_CHAR(datum, 'YYYY-MM')
+        TO_CHAR(t.datum, 'YYYY-MM') AS month,
+        COALESCE(SUM(CASE WHEN COALESCE(c.type, 'rashod') = 'prihod' THEN t.iznos ELSE 0 END), 0) AS prihodi,
+        COALESCE(SUM(CASE WHEN COALESCE(c.type, 'rashod') = 'rashod' THEN t.iznos ELSE 0 END), 0) AS rashodi
+      FROM transactions t
+      LEFT JOIN categories c ON c.name = t.kategorija AND c.user_id = t.user_id
+      WHERE t.user_id = $1
+      GROUP BY TO_CHAR(t.datum, 'YYYY-MM')
       ORDER BY month`,
       [req.userId]
     );
