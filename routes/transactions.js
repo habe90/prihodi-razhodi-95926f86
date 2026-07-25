@@ -34,8 +34,8 @@ router.post('/', authMiddleware, async (req, res) => {
   if (isNaN(parsedIznos) || parsedIznos <= 0) {
     return res.status(400).json({ error: 'Iznos mora biti pozitivan broj.' });
   }
-  if (!['prihod', 'rashod'].includes(kategorija)) {
-    return res.status(400).json({ error: 'Kategorija mora biti prihod ili rashod.' });
+  if (!kategorija || !kategorija.trim()) {
+    return res.status(400).json({ error: 'Kategorija je obavezna.' });
   }
   if (!datum) {
     return res.status(400).json({ error: 'Datum je obavezan.' });
