@@ -4,6 +4,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Categories from './pages/Categories';
+import Profile from './pages/Profile';
+import Recurring from './pages/Recurring';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -68,6 +70,16 @@ function AppRoutes() {
       <Route path="/categories" element={
         <ProtectedRoute>
           <Categories />
+        </ProtectedRoute>
+      } />
+      <Route path="/profile" element={
+        <ProtectedRoute>
+          <Profile />
+        </ProtectedRoute>
+      } />
+      <Route path="/recurring" element={
+        <ProtectedRoute>
+          <Recurring />
         </ProtectedRoute>
       } />
       <Route path="*" element={<Navigate to="/" replace />} />
