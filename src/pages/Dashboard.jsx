@@ -48,6 +48,10 @@ export default function Dashboard() {
   const fetchData = useCallback(async () => {
     try {
       const headers = getHeaders();
+
+      // prvo sinhronizuj ponavljajuće transakcije
+      await fetch(`${API_BASE}/recurring/sync`, { method: 'POST', headers }).catch(() => {});
+
       const [txRes, sumRes, catRes] = await Promise.all([
         fetch(`${API_BASE}/transactions`, { headers }),
         fetch(`${API_BASE}/summary`, { headers }),
@@ -188,6 +192,22 @@ export default function Dashboard() {
               <line x1="7" y1="7" x2="7.01" y2="7" />
             </svg>
             Kategorije
+          </button>
+          <button onClick={() => navigate('/recurring')} style={catBtnStyle}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="17 1 21 5 17 9" />
+              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+              <polyline points="7 23 3 19 7 15" />
+              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+            </svg>
+            Ponavljajuće
+          </button>
+          <button onClick={() => navigate('/profile')} style={catBtnStyle}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            Profil
           </button>
           <span style={{ fontSize: 13, color: '#888', display: 'flex', alignItems: 'center', gap: 4 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
