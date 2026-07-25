@@ -90,6 +90,28 @@ export async function initDb() {
     );
   `);
 
+  // Tabela kategorija
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS categories (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      type VARCHAR(10) NOT NULL CHECK (type IN ('prihod', 'rashod')),
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, name, type)
+    );
+  `);
+
+  // Ukloni stari CHECK constraint sa transactions.kategorija (ako postoji)
+  try {
+    await pool.query(`
+      ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_kategorija_check;
+    `);
+    console.log('Old CHECK constraint dropped (if existed).');
+  } catch (err) {
+    console.log('No old constraint to drop:', err.message);
+  }
+
   console.log('Database tables ready.');
 }
 
