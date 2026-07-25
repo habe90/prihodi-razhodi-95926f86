@@ -112,6 +112,20 @@ export async function initDb() {
     console.log('No old constraint to drop:', err.message);
   }
 
+  // Tabela za ponavljajuće transakcije
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS recurring_transactions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      naziv VARCHAR(255) NOT NULL,
+      iznos NUMERIC(12,2) NOT NULL,
+      kategorija VARCHAR(100) NOT NULL,
+      datum_pocetka DATE NOT NULL,
+      aktivan BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+
   console.log('Database tables ready.');
 }
 
