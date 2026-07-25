@@ -7,17 +7,21 @@ const USER_KEY = 'finansije-user';
 const API_BASE = '/api';
 
 function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
+  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
 }
 
 function saveAuth(token, user) {
-  localStorage.setItem(TOKEN_KEY, token);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch { /* quota exceeded — ignore */ }
 }
 
 function clearAuth() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  } catch { /* ignore */ }
 }
 
 export function AuthProvider({ children }) {
