@@ -3,7 +3,6 @@ import pg from 'pg';
 const { Pool } = pg;
 
 function getConnectionString() {
-  // probaj više varijanti env varijabli za bazu
   const candidates = [
     'DATABASE_URL',
     'DB_URL',
@@ -16,27 +15,61 @@ function getConnectionString() {
       return process.env[key];
     }
   }
-  console.warn('WARNING: No database env variable found! Tried:', candidates.join(', '));
+  console.warn('WARNING: No database env variable found!');
   return null;
 }
 
 const connString = getConnectionString();
 
-const pool = connString
-  ? new Pool({
-      connectionString: connString,
-      ssl: { rejectUnauthorized: false },
-    })
-  : null;
+// Ukloni ?sslmode=... ili &sslmode=... iz connection stringa
+// da ne bude konflikta sa ssl objektom
+function cleanConnString(cs) {
+  return cs.replace(/[?&]sslmode=[^&]+/g, '').replace(/\?$/, '');
+}
 
-if (pool) {
+let pool = null;
+
+const sslOptions = [
+  { rejectUnauthorized: false },
+  true,
+  false,
+];
+
+async function tryConnect(cs) {
+  for (const ssl of sslOptions) {
+    try {
+      console.log(`Trying connection with ssl=${JSON.stringify(ssl)}...`);
+      const p = new Pool({
+        connectionString: cs,
+        ssl,
+      });
+      const res = await p.query('SELECT NOW() AS now');
+      console.log('Connection OK! Server time:', res.rows[0].now);
+      return p;
+    } catch (err) {
+      console.log(`  Failed: ${err.message}`);
+    }
+  }
+  return null;
+}
+
+if (connString) {
+  const cleaned = cleanConnString(connString);
+  pool = await tryConnect(cleaned);
+  if (!pool) {
+    console.error('All connection attempts failed.');
+    // kreiraj dummy pool koji ne radi — query() će baciti grešku
+    pool = new Pool({ connectionString: connString, ssl: { rejectUnauthorized: false } });
+  }
   pool.on('error', (err) => {
     console.error('DB pool error:', err.message);
   });
+} else {
+  console.error('No connection string — database disabled.');
 }
 
 export async function query(text, params) {
-  if (!pool) throw new Error('Database not configured — no connection string.');
+  if (!pool) throw new Error('Database not configured.');
   const start = Date.now();
   const res = await pool.query(text, params);
   const duration = Date.now() - start;
@@ -45,13 +78,19 @@ export async function query(text, params) {
 }
 
 export async function initDb() {
-  if (!pool) {
-    console.error('initDb: No pool — database connection string not found.');
-    throw new Error('DATABASE_URL not set');
+  if (!pool) throw new Error('DATABASE_URL not set');
+
+  // ponovo pokušaj konekciju ako prvi pokušaj nije uspeo
+  if (connString) {
+    const cleaned = cleanConnString(connString);
+    const p = await tryConnect(cleaned);
+    if (p) {
+      pool = p;
+      pool.on('error', (err) => console.error('DB pool error:', err.message));
+    }
   }
 
-  // prvo probaj prostu konekciju
-  console.log('Testing DB connection...');
+  // test query
   const test = await pool.query('SELECT NOW() AS now');
   console.log('DB connection OK, server time:', test.rows[0].now);
 
