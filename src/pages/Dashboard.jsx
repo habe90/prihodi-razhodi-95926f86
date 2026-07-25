@@ -3,14 +3,15 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, Line
 } from 'recharts';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-function formatRSD(n) {
+function formatKM(n) {
   return new Intl.NumberFormat('sr-RS', {
-    style: 'currency',
-    currency: 'RSD',
-    minimumFractionDigits: 0,
-  }).format(n);
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n) + ' KM';
 }
 
 function formatDate(d) {
@@ -28,39 +29,41 @@ function monthLabel(monthStr) {
 
 export default function Dashboard() {
   const { user, logout, getHeaders, API_BASE } = useAuth();
+  const navigate = useNavigate();
 
   const [transactions, setTransactions] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [summary, setSummary] = useState({ prihodi: 0, rashodi: 0, bilans: 0, monthly: [] });
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
 
   const [form, setForm] = useState({
-    naziv: '', iznos: '', kategorija: 'rashod', datum: new Date().toISOString().slice(0, 10),
+    naziv: '', iznos: '', kategorija: '', datum: new Date().toISOString().slice(0, 10),
   });
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // --- fetch data ---
   const fetchData = useCallback(async () => {
     try {
       const headers = getHeaders();
-      const [txRes, sumRes] = await Promise.all([
+      const [txRes, sumRes, catRes] = await Promise.all([
         fetch(`${API_BASE}/transactions`, { headers }),
         fetch(`${API_BASE}/summary`, { headers }),
+        fetch(`${API_BASE}/categories`, { headers }),
       ]);
 
-      if (!txRes.ok || !sumRes.ok) {
-        if (txRes.status === 401 || sumRes.status === 401) {
-          logout();
-          return;
-        }
+      if (!txRes.ok || !sumRes.ok || !catRes.ok) {
+        if (txRes.status === 401) { logout(); return; }
         throw new Error('Greška pri učitavanju.');
       }
 
       const txData = await txRes.json();
       const sumData = await sumRes.json();
+      const catData = await catRes.json();
+
       setTransactions(txData);
       setSummary(sumData);
+      setCategories(catData);
       setFetchError('');
     } catch (err) {
       setFetchError(err.message || 'Greška pri učitavanju podataka.');
@@ -72,7 +75,14 @@ export default function Dashboard() {
     fetchData();
   }, [fetchData]);
 
-  // --- handlers ---
+  // grupisanje kategorija za select
+  const prihodCategories = categories.filter(c => c.type === 'prihod');
+  const rashodCategories = categories.filter(c => c.type === 'rashod');
+
+  // kada se promeni kategorija, automatski postavi tip
+  const selectedCategory = categories.find(c => c.name === form.kategorija);
+  const selectedTip = selectedCategory ? selectedCategory.type : 'rashod';
+
   function handleChange(e) {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
@@ -82,6 +92,8 @@ export default function Dashboard() {
   async function handleSubmit(e) {
     e.preventDefault();
     setFormError('');
+
+    if (!form.kategorija) { setFormError('Izaberite kategoriju.'); return; }
 
     const iznos = parseFloat(form.iznos);
     if (!form.naziv.trim()) { setFormError('Unesite naziv.'); return; }
@@ -109,12 +121,10 @@ export default function Dashboard() {
         return;
       }
 
-      // osveži sve podatke
       await fetchData();
 
       setForm({
-        naziv: '', iznos: '', kategorija: 'rashod',
-        datum: new Date().toISOString().slice(0, 10),
+        naziv: '', iznos: '', kategorija: '', datum: new Date().toISOString().slice(0, 10),
       });
     } catch {
       setFormError('Greška pri povezivanju sa serverom.');
@@ -126,12 +136,8 @@ export default function Dashboard() {
     try {
       const headers = getHeaders();
       const res = await fetch(`${API_BASE}/transactions/${id}`, { method: 'DELETE', headers });
-      if (res.ok) {
-        await fetchData();
-      }
-    } catch {
-      // silently fail, data will refresh on next load
-    }
+      if (res.ok) await fetchData();
+    } catch { /* ignore */ }
   }
 
   const cardBase = {
@@ -158,7 +164,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 20px' }}>
-      {/* ---- HEADER ---- */}
+      {/* HEADER */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, color: '#111' }}>
@@ -174,6 +180,13 @@ export default function Dashboard() {
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => navigate('/categories')} style={catBtnStyle}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+              <line x1="7" y1="7" x2="7.01" y2="7" />
+            </svg>
+            Kategorije
+          </button>
           <span style={{ fontSize: 13, color: '#888', display: 'flex', alignItems: 'center', gap: 4 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -197,25 +210,25 @@ export default function Dashboard() {
       )}
 
       <div style={{ marginTop: 24 }}>
-        {/* ---- SUMMARY CARDS ---- */}
+        {/* SUMMARY CARDS */}
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 28 }}>
           <div style={{ ...cardBase, borderLeft: '4px solid #16a34a' }}>
             <div style={{ fontSize: 13, color: '#888', textTransform: 'uppercase', letterSpacing: '.5px' }}>Ukupni prihodi</div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: '#16a34a', marginTop: 4 }}>{formatRSD(summary.prihodi)}</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: '#16a34a', marginTop: 4 }}>{formatKM(summary.prihodi)}</div>
           </div>
           <div style={{ ...cardBase, borderLeft: '4px solid #dc2626' }}>
             <div style={{ fontSize: 13, color: '#888', textTransform: 'uppercase', letterSpacing: '.5px' }}>Ukupni rashodi</div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: '#dc2626', marginTop: 4 }}>{formatRSD(summary.rashodi)}</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: '#dc2626', marginTop: 4 }}>{formatKM(summary.rashodi)}</div>
           </div>
           <div style={{ ...cardBase, borderLeft: `4px solid ${summary.bilans >= 0 ? '#2563eb' : '#e11d48'}` }}>
             <div style={{ fontSize: 13, color: '#888', textTransform: 'uppercase', letterSpacing: '.5px' }}>Bilans</div>
             <div style={{ fontSize: 26, fontWeight: 700, color: summary.bilans >= 0 ? '#2563eb' : '#e11d48', marginTop: 4 }}>
-              {formatRSD(summary.bilans)}
+              {formatKM(summary.bilans)}
             </div>
           </div>
         </div>
 
-        {/* ---- UNOS FORMA ---- */}
+        {/* UNOS FORMA */}
         <div style={{ background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,.06), 0 2px 12px rgba(0,0,0,.04)', marginBottom: 28 }}>
           <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600, color: '#111' }}>Nova transakcija</h2>
           <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -224,14 +237,33 @@ export default function Dashboard() {
               <input name="naziv" value={form.naziv} onChange={handleChange} placeholder="npr. Plata" style={inputStyle} />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: '#555' }}>
-              Iznos (RSD)
-              <input name="iznos" value={form.iznos} onChange={handleChange} type="number" step="0.01" min="0" placeholder="0" style={{ ...inputStyle, width: 130 }} />
+              Iznos (KM)
+              <input name="iznos" value={form.iznos} onChange={handleChange} type="number" step="0.01" min="0" placeholder="0,00" style={{ ...inputStyle, width: 130 }} />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: '#555' }}>
               Kategorija
-              <select name="kategorija" value={form.kategorija} onChange={handleChange} style={{ ...inputStyle, width: 130, cursor: 'pointer' }}>
-                <option value="prihod">Prihod</option>
-                <option value="rashod">Rashod</option>
+              <select name="kategorija" value={form.kategorija} onChange={handleChange} style={{ ...inputStyle, width: 180, cursor: 'pointer' }}>
+                <option value="">-- izaberite --</option>
+                {prihodCategories.length > 0 && (
+                  <optgroup label="Prihodi">
+                    {prihodCategories.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {rashodCategories.length > 0 && (
+                  <optgroup label="Rashodi">
+                    {rashodCategories.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {categories.length === 0 && (
+                  <>
+                    <option value="prihod">Prihod</option>
+                    <option value="rashod">Rashod</option>
+                  </>
+                )}
               </select>
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: '#555' }}>
@@ -243,9 +275,22 @@ export default function Dashboard() {
             </button>
           </form>
           {formError && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 10 }}>{formError}</div>}
+          {categories.length === 0 && (
+            <div style={{ marginTop: 12, fontSize: 13, color: '#888' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', marginRight: 4, marginBottom: 1 }}>
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              Nemate definisanih kategorija.{' '}
+              <button onClick={() => navigate('/categories')} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontWeight: 600, fontSize: 13, padding: 0 }}>
+                Dodajte kategorije
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* ---- CHART ---- */}
+        {/* CHART */}
         <div style={{ background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,.06), 0 2px 12px rgba(0,0,0,.04)', marginBottom: 28 }}>
           <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600, color: '#111' }}>Bilans po mesecima</h2>
           {monthlyChartData.length === 0 ? (
@@ -257,7 +302,7 @@ export default function Dashboard() {
                 <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#888' }} />
                 <YAxis tick={{ fontSize: 12, fill: '#888' }} />
                 <Tooltip
-                  formatter={(value) => formatRSD(value)}
+                  formatter={(value) => formatKM(value)}
                   contentStyle={{ borderRadius: 8, border: '1px solid #eee', boxShadow: '0 4px 16px rgba(0,0,0,.08)' }}
                 />
                 <Legend wrapperStyle={{ fontSize: 13 }} />
@@ -269,7 +314,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ---- TABELA ---- */}
+        {/* TABELA */}
         <div style={{ background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,.06), 0 2px 12px rgba(0,0,0,.04)' }}>
           <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600, color: '#111' }}>Sve transakcije</h2>
           {transactions.length === 0 ? (
@@ -287,34 +332,37 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map(t => (
-                    <tr key={t.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
-                      <td style={tdStyle}>{t.naziv}</td>
-                      <td style={{ ...tdStyle, fontWeight: 600, color: t.kategorija === 'prihod' ? '#16a34a' : '#dc2626' }}>
-                        {t.kategorija === 'prihod' ? '+' : '−'} {formatRSD(Number(t.iznos))}
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={{
-                          display: 'inline-block', padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500,
-                          background: t.kategorija === 'prihod' ? '#dcfce7' : '#fee2e2',
-                          color: t.kategorija === 'prihod' ? '#15803d' : '#b91c1c',
-                        }}>
-                          {t.kategorija === 'prihod' ? 'Prihod' : 'Rashod'}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>{formatDate(t.datum)}</td>
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <button onClick={() => obrisi(t.id)} style={delBtnStyle} title="Obriši">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                            <line x1="10" y1="11" x2="10" y2="17" />
-                            <line x1="14" y1="11" x2="14" y2="17" />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {transactions.map(t => {
+                    const isPrihod = t.tip === 'prihod';
+                    return (
+                      <tr key={t.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
+                        <td style={tdStyle}>{t.naziv}</td>
+                        <td style={{ ...tdStyle, fontWeight: 600, color: isPrihod ? '#16a34a' : '#dc2626' }}>
+                          {isPrihod ? '+' : '−'} {formatKM(Number(t.iznos))}
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={{
+                            display: 'inline-block', padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+                            background: isPrihod ? '#dcfce7' : '#fee2e2',
+                            color: isPrihod ? '#15803d' : '#b91c1c',
+                          }}>
+                            {t.kategorija}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>{formatDate(t.datum)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          <button onClick={() => obrisi(t.id)} style={delBtnStyle} title="Obriši">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                              <line x1="10" y1="11" x2="10" y2="17" />
+                              <line x1="14" y1="11" x2="14" y2="17" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -337,6 +385,12 @@ const btnStyle = {
 
 const logoutBtnStyle = {
   padding: '7px 16px', background: 'transparent', color: '#888', border: '1px solid #ddd',
+  borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer',
+};
+
+const catBtnStyle = {
+  display: 'inline-flex', alignItems: 'center', gap: 5,
+  padding: '7px 14px', background: 'transparent', color: '#555', border: '1px solid #ddd',
   borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 
