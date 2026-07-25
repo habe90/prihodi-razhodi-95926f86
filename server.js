@@ -8,6 +8,8 @@ import authRoutes from './routes/auth.js';
 import transactionRoutes from './routes/transactions.js';
 import summaryRoutes from './routes/summary.js';
 import categoryRoutes from './routes/categories.js';
+import profileRoutes from './routes/profile.js';
+import recurringRoutes from './routes/recurring.js';
 import { initDb } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -82,6 +84,8 @@ app.use('/api', requireDb, authRoutes);
 app.use('/api/transactions', requireDb, transactionRoutes);
 app.use('/api/summary', requireDb, summaryRoutes);
 app.use('/api/categories', requireDb, categoryRoutes);
+app.use('/api/profile', requireDb, profileRoutes);
+app.use('/api/recurring', requireDb, recurringRoutes);
 
 // Serviraj statički frontend build
 const distDir = path.join(__dirname, 'dist');
