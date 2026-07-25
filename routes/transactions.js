@@ -8,7 +8,12 @@ const router = Router();
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const result = await query(
-      'SELECT id, naziv, iznos, kategorija, datum, created_at FROM transactions WHERE user_id = $1 ORDER BY datum DESC, created_at DESC',
+      `SELECT t.id, t.naziv, t.iznos, t.kategorija, t.datum, t.created_at,
+              COALESCE(c.type, 'rashod') AS tip
+       FROM transactions t
+       LEFT JOIN categories c ON c.name = t.kategorija AND c.user_id = t.user_id
+       WHERE t.user_id = $1
+       ORDER BY t.datum DESC, t.created_at DESC`,
       [req.userId]
     );
     res.json(result.rows);
