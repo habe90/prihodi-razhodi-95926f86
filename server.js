@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import transactionRoutes from './routes/transactions.js';
 import summaryRoutes from './routes/summary.js';
+import categoryRoutes from './routes/categories.js';
 import { initDb } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -49,6 +50,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api', requireDb, authRoutes);
 app.use('/api/transactions', requireDb, transactionRoutes);
 app.use('/api/summary', requireDb, summaryRoutes);
+app.use('/api/categories', requireDb, categoryRoutes);
 
 // Serviraj statički frontend build
 const distDir = path.join(__dirname, 'dist');
