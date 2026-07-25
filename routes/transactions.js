@@ -4,7 +4,18 @@ import { authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET /api/transactions — sve transakcije za ulogovanog usera
+function sanitize(str, maxLen = 255) {
+  if (typeof str !== 'string') return '';
+  return str.trim().slice(0, maxLen);
+}
+
+function isValidDate(str) {
+  if (!str) return false;
+  const d = new Date(str);
+  return d instanceof Date && !isNaN(d) && str.match(/^\d{4}-\d{2}-\d{2}$/);
+}
+
+// GET /api/transactions
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const result = await query(
@@ -23,28 +34,33 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/transactions — dodaj novu
+// POST /api/transactions
 router.post('/', authMiddleware, async (req, res) => {
-  const { naziv, iznos, kategorija, datum } = req.body;
+  const naziv = sanitize(req.body.naziv, 200);
+  const kategorija = sanitize(req.body.kategorija, 100);
+  const datum = sanitize(req.body.datum, 10);
+  const iznos = parseFloat(req.body.iznos);
 
-  if (!naziv || !naziv.trim()) {
+  if (!naziv) {
     return res.status(400).json({ error: 'Naziv je obavezan.' });
   }
-  const parsedIznos = parseFloat(iznos);
-  if (isNaN(parsedIznos) || parsedIznos <= 0) {
+  if (isNaN(iznos) || iznos <= 0) {
     return res.status(400).json({ error: 'Iznos mora biti pozitivan broj.' });
   }
-  if (!kategorija || !kategorija.trim()) {
+  if (iznos > 9999999999) {
+    return res.status(400).json({ error: 'Iznos je prevelik.' });
+  }
+  if (!kategorija) {
     return res.status(400).json({ error: 'Kategorija je obavezna.' });
   }
-  if (!datum) {
-    return res.status(400).json({ error: 'Datum je obavezan.' });
+  if (!isValidDate(datum)) {
+    return res.status(400).json({ error: 'Datum nije ispravan (format: YYYY-MM-DD).' });
   }
 
   try {
     const result = await query(
       'INSERT INTO transactions (user_id, naziv, iznos, kategorija, datum) VALUES ($1, $2, $3, $4, $5) RETURNING id, naziv, iznos, kategorija, datum, created_at',
-      [req.userId, naziv.trim(), parsedIznos, kategorija, datum]
+      [req.userId, naziv, iznos, kategorija, datum]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -53,12 +69,17 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// DELETE /api/transactions/:id — obriši transakciju
+// DELETE /api/transactions/:id
 router.delete('/:id', authMiddleware, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id) || id <= 0) {
+    return res.status(400).json({ error: 'Neispravan ID.' });
+  }
+
   try {
     const result = await query(
       'DELETE FROM transactions WHERE id = $1 AND user_id = $2 RETURNING id',
-      [req.params.id, req.userId]
+      [id, req.userId]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Transakcija nije pronađena.' });
