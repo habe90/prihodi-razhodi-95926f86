@@ -16,15 +16,17 @@ function formatKM(n) {
 
 function formatDate(d) {
   const date = new Date(d);
-  return date.toLocaleDateString('sr-RS', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  });
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${dd}.${mm}.${yyyy}.`;
 }
 
+const MONTHS_LATIN = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'avg', 'sep', 'okt', 'nov', 'dec'];
+
 function monthLabel(monthStr) {
-  return new Date(monthStr + '-01').toLocaleDateString('sr-RS', {
-    month: 'short', year: 'numeric',
-  });
+  const [y, m] = monthStr.split('-');
+  return MONTHS_LATIN[parseInt(m, 10) - 1] + ' ' + y;
 }
 
 export default function Dashboard() {
