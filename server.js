@@ -13,37 +13,69 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Globalno stanje baze
+let dbReady = false;
+
 app.use(cors());
 app.use(express.json());
 
+// Middleware — proveri da li je baza spremna za API rute
+function requireDb(_req, res, next) {
+  if (!dbReady) {
+    return res.status(503).json({ error: 'Baza nije dostupna, pokušajte ponovo za trenutak.' });
+  }
+  next();
+}
+
 // API rute
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    db: dbReady ? 'connected' : 'pending',
+    time: new Date().toISOString(),
+  });
 });
 
-app.use('/api', authRoutes);
-app.use('/api/transactions', transactionRoutes);
-app.use('/api/summary', summaryRoutes);
+app.use('/api', requireDb, authRoutes);
+app.use('/api/transactions', requireDb, transactionRoutes);
+app.use('/api/summary', requireDb, summaryRoutes);
 
 // Serviraj statički frontend build
 const distDir = path.join(__dirname, 'dist');
 app.use(express.static(distDir));
 
-// SPA fallback — sve što nije API ide na index.html
+// SPA fallback
 app.get(/^\/(?!api\/).*/, (_req, res) => {
   res.sendFile(path.join(distDir, 'index.html'));
 });
 
 async function start() {
+  console.log('Starting server...');
+  console.log('PORT:', PORT);
+  console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
+
+  // Pokušaj inicijalizaciju baze, ali ne blokiraj startovanje servera
   try {
     await initDb();
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server running on port ${PORT}`);
-    });
+    dbReady = true;
+    console.log('Database initialized successfully.');
   } catch (err) {
-    console.error('Failed to start server:', err);
-    process.exit(1);
+    console.error('Database init failed (server will start without DB):', err.message);
+    // probaj ponovo za 5 sekundi
+    setTimeout(async () => {
+      try {
+        await initDb();
+        dbReady = true;
+        console.log('Database initialized on retry.');
+      } catch (retryErr) {
+        console.error('Database retry also failed:', retryErr.message);
+      }
+    }, 5000);
   }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 }
 
 start();
