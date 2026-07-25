@@ -28,6 +28,16 @@ function requireDb(_req, res, next) {
 }
 
 // API rute
+app.get('/api/debug', (_req, res) => {
+  const envKeys = ['DATABASE_URL', 'DB_URL', 'POSTGRES_URL', 'POSTGRES_PRIVATE_URL', 'PORT', 'NODE_ENV'];
+  const env = {};
+  for (const k of envKeys) {
+    const v = process.env[k];
+    env[k] = v ? `${v.slice(0, 25)}...` : 'NOT SET';
+  }
+  res.json({ env, dbReady });
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
