@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 3000;
 let dbReady = false;
 
 // --- Sigurnost ---
-app.use(helmet({ contentSecurityPolicy: false })); // CSP off da bi React radilo
+app.use(helmet({ contentSecurityPolicy: false, frameguard: false })); // CSP off za React, frameguard off za OctaDeploy preview
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
   methods: ['GET', 'POST', 'DELETE'],
