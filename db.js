@@ -1,30 +1,60 @@
 import pg from 'pg';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 const { Pool } = pg;
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
-});
+function getConnectionString() {
+  // probaj više varijanti env varijabli za bazu
+  const candidates = [
+    'DATABASE_URL',
+    'DB_URL',
+    'POSTGRES_URL',
+    'POSTGRES_PRIVATE_URL',
+  ];
+  for (const key of candidates) {
+    if (process.env[key]) {
+      console.log(`Using DB env: ${key}`);
+      return process.env[key];
+    }
+  }
+  console.warn('WARNING: No database env variable found! Tried:', candidates.join(', '));
+  return null;
+}
 
-pool.on('error', (err) => {
-  console.error('DB pool error:', err.message);
-});
+const connString = getConnectionString();
+
+const pool = connString
+  ? new Pool({
+      connectionString: connString,
+      ssl: { rejectUnauthorized: false },
+    })
+  : null;
+
+if (pool) {
+  pool.on('error', (err) => {
+    console.error('DB pool error:', err.message);
+  });
+}
 
 export async function query(text, params) {
+  if (!pool) throw new Error('Database not configured — no connection string.');
   const start = Date.now();
   const res = await pool.query(text, params);
   const duration = Date.now() - start;
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('DB query', { text: text.slice(0, 80), duration, rows: res.rowCount });
-  }
+  console.log('DB query', { text: text.slice(0, 80), duration, rows: res.rowCount });
   return res;
 }
 
 export async function initDb() {
+  if (!pool) {
+    console.error('initDb: No pool — database connection string not found.');
+    throw new Error('DATABASE_URL not set');
+  }
+
+  // prvo probaj prostu konekciju
+  console.log('Testing DB connection...');
+  const test = await pool.query('SELECT NOW() AS now');
+  console.log('DB connection OK, server time:', test.rows[0].now);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
